@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>世界史まとめ図・相関図作成ツール</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;500;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --paper-1:#efe6d3;
+    --paper-2:#e3d6b8;
+    --ink:#2c2a25;
+    --ink-soft:#665f4c;
+    --navy:#1f2a44;
+    --navy-2:#2c3a5e;
+    --gold:#c9a227;
+    --gold-soft:#e4c766;
+    --line-grid: rgba(90,80,55,0.14);
+
+    --cat-person-bg:#fbeecb;   --cat-person-bd:#b98a1e;
+    --cat-state-bg:#dbe5f6;    --cat-state-bd:#2f4b7c;
+    --cat-place-bg:#dfeed9;    --cat-place-bd:#3f7d50;
+    --cat-event-bg:#f6dbd9;    --cat-event-bd:#9b2c2c;
+    --cat-concept-bg:#e9dff2;  --cat-concept-bd:#6a4c93;
+    --cat-goods-bg:#efdfc4;    --cat-goods-bd:#8b5e34;
+    --cat-free-bg:#eeeeea;     --cat-free-bd:#666660;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;font-family:'Noto Sans JP',sans-serif;color:var(--ink);}
+  #app{display:flex;flex-direction:column;height:100vh;background:var(--paper-1);position:relative;}
+
+  /* ---------- Header ---------- */
+  header{background:linear-gradient(180deg,var(--navy) 0%,var(--navy-2) 100%);color:#f2ead0;
+    border-bottom:3px solid var(--gold);padding:10px 16px 8px;flex-shrink:0;position:relative;}
+  .title-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .title-row .mark{font-family:'Shippori Mincho',serif;font-size:20px;color:var(--gold-soft);white-space:nowrap;letter-spacing:2px;}
+  #appBrand{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;color:var(--gold-soft);
+    letter-spacing:1px;white-space:nowrap;margin-right:auto;padding-right:14px;}
+  #docTitle{flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(228,199,102,0.4);
+    color:#f6efd8;font-family:'Shippori Mincho',serif;font-size:20px;font-weight:700;
+    padding:6px 12px;border-radius:4px;outline:none;letter-spacing:1px;}
+  #docTitle::placeholder{color:#c9c2a6;font-weight:500;}
+  #docTitle:focus{border-color:var(--gold);background:rgba(255,255,255,0.1);}
+
+  /* Undo/redo top-right */
+  #historyControls{display:flex;gap:6px;margin-left:auto;}
+  #historyControls button{background:#3a4a70;color:#f2ead0;border:1px solid rgba(255,255,255,0.2);
+    border-radius:5px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;}
+  #historyControls button:hover:not(:disabled){background:#4c5f8c;}
+  #historyControls button:disabled{opacity:0.35;cursor:not-allowed;}
+
+  .toolbar-row{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;}
+  .toolbar-row.context-row{margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,0.18);min-height:0;}
+  .tool-group{display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:4px 6px;}
+  .tool-group .grp-label{font-size:11px;color:#cfc7a6;margin-right:2px;white-space:nowrap;}
+  button.tbtn{background:#3a4a70;color:#f2ead0;border:1px solid rgba(255,255,255,0.15);
+    border-radius:5px;padding:5px 9px;font-size:12px;cursor:pointer;white-space:nowrap;
+    font-family:'Noto Sans JP',sans-serif;transition:background .15s,transform .1s;}
+  button.tbtn:hover{background:#4c5f8c;}
+  button.tbtn:active{transform:translateY(1px);}
+  button.tbtn.active{background:var(--gold);color:#2b2a1c;border-color:var(--gold-soft);font-weight:700;}
+  button.tbtn.danger{background:#7c2b2b;}
+  button.tbtn.danger:hover{background:#9b3737;}
+  button.tbtn.gold{background:var(--gold);color:#2b2a1c;font-weight:700;}
+  button.tbtn.gold:hover{background:var(--gold-soft);}
+  select.tsel{background:#243356;color:#f2ead0;border:1px solid rgba(255,255,255,0.2);
+    border-radius:5px;padding:4px 6px;font-size:12px;font-family:'Noto Sans JP',sans-serif;}
+  input.tnum{width:64px;background:#243356;color:#f2ead0;border:1px solid rgba(255,255,255,0.2);
+    border-radius:5px;padding:4px 6px;font-size:12px;font-family:'Noto Sans JP',sans-serif;}
+  .cat-btn{display:flex;align-items:center;gap:4px;}
+  .cat-swatch{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  /* ---------- Viewport / Canvas ---------- */
+  #viewport{position:relative;flex:1;overflow:hidden;cursor:grab;
+    background-image:
+      linear-gradient(var(--line-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-grid) 1px, transparent 1px);
+    background-size:40px 40px;
+    background-color:var(--paper-2);
+  }
+  #viewport.panning{cursor:grabbing;}
+  #viewport.mode-connector{cursor:crosshair;}
+  #viewport.mode-group{cursor:crosshair;}
+
+  #world{position:absolute;left:0;top:0;width:9000px;height:7000px;transform-origin:0 0;}
+
+  svg#connectorLayer{position:absolute;left:0;top:0;width:9000px;height:7000px;overflow:visible;pointer-events:none;}
+  svg#connectorLayer path.hit{pointer-events:stroke;cursor:pointer;}
+  svg#connectorLayer .selected-halo{filter:drop-shadow(0 0 3px #2b7de9);}
+
+  /* ---------- Group (region) ---------- */
+  .group-box{position:absolute;border:2px dashed var(--ink-soft);border-radius:6px;
+    background:rgba(255,255,255,0.10);z-index:1;}
+  .group-box.selected{border-color:#2b7de9;box-shadow:0 0 0 2px rgba(43,125,233,0.35);}
+  .group-label{position:absolute;top:-13px;left:10px;background:var(--paper-1);
+    border:1px solid var(--ink-soft);border-radius:4px;padding:1px 8px;font-size:13px;
+    font-family:'Shippori Mincho',serif;font-weight:700;color:var(--ink);outline:none;cursor:text;}
+  .group-del{position:absolute;top:-13px;right:6px;width:18px;height:18px;border-radius:50%;
+    border:1px solid var(--ink-soft);background:#fff;color:#7c2b2b;font-size:12px;line-height:16px;
+    text-align:center;cursor:pointer;padding:0;}
+  .group-resize{position:absolute;width:14px;height:14px;right:-7px;bottom:-7px;
+    background:var(--paper-1);border:2px solid var(--ink-soft);border-radius:3px;cursor:nwse-resize;}
+
+  .select-draft{position:absolute;border:2px dashed #2b7de9;background:rgba(43,125,233,0.10);pointer-events:none;z-index:5;}
+  .group-draft{position:absolute;border:2px dashed #2b7de9;background:rgba(43,125,233,0.08);pointer-events:none;}
+
+  /* ---------- Cards ---------- */
+  .card{position:absolute;width:220px;border-radius:8px;border:2px solid #999;
+    box-shadow:1px 2px 4px rgba(0,0,0,0.25);font-size:12px;background:#fff;
+    display:flex;flex-direction:column;user-select:none;}
+  .card.selected{box-shadow:0 0 0 3px rgba(43,125,233,0.55), 1px 2px 4px rgba(0,0,0,0.25);}
+  .card.connector-pending{box-shadow:0 0 0 3px rgba(201,162,39,0.85), 1px 2px 4px rgba(0,0,0,0.25);}
+  .card.pinned{box-shadow:1px 2px 4px rgba(0,0,0,0.25);}
+  .card.pinned::before{content:'';position:absolute;top:-11px;left:50%;transform:translateX(-50%) rotate(-3deg);
+    width:74px;height:24px;background:rgba(255,240,150,0.8);border:1px solid rgba(0,0,0,0.08);
+    box-shadow:0 1px 3px rgba(0,0,0,0.3);pointer-events:none;}
+  .card.pinned.selected::before{background:rgba(255,225,120,0.9);}
+  .card-bar{display:flex;align-items:center;gap:4px;padding:4px 6px;border-radius:6px 6px 0 0;
+    cursor:move;font-weight:700;}
+  .card.pinned .card-bar{cursor:not-allowed;}
+  .card-icon{font-size:13px;}
+  .card-cat-label{flex:1;font-size:10px;opacity:0.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .card-del{border:none;background:rgba(0,0,0,0.12);color:#3a2f1f;width:17px;height:17px;
+    border-radius:50%;cursor:pointer;font-size:11px;line-height:15px;padding:0;flex-shrink:0;}
+  .card-del:hover{background:rgba(0,0,0,0.25);}
+  .card-title{padding:6px 8px 2px;font-weight:700;font-size:13.5px;cursor:text;min-height:18px;
+    outline:none;line-height:1.3;word-break:break-word;}
+  .card-title:empty:before{content:attr(data-placeholder);color:#999;font-weight:400;}
+  .card-memo{margin:2px 6px 6px;padding:4px 6px;border:1px solid rgba(0,0,0,0.12);border-radius:4px;
+    background:rgba(255,255,255,0.55);font-size:11.5px;resize:none;overflow:hidden;min-height:32px;
+    line-height:1.4;color:#333;cursor:text;flex:1;}
+  .card-memo:focus{background:#fff;border-color:#999;}
+  .card.has-fixed-h .card-memo{overflow-y:auto;}
+
+  .font-serif .card-title, .font-serif .card-memo{font-family:'Noto Serif JP',serif;}
+  .font-sans .card-title, .font-sans .card-memo{font-family:'Noto Sans JP',sans-serif;}
+
+  .card-resize{position:absolute;width:13px;height:13px;right:-6px;bottom:-6px;
+    background:#fff;border:2px solid #888;border-radius:3px;cursor:nwse-resize;z-index:2;}
+
+  .cat-person   .card-bar{background:var(--cat-person-bg); }
+  .cat-state    .card-bar{background:var(--cat-state-bg); }
+  .cat-place    .card-bar{background:var(--cat-place-bg); }
+  .cat-event    .card-bar{background:var(--cat-event-bg); }
+  .cat-concept  .card-bar{background:var(--cat-concept-bg); }
+  .cat-goods    .card-bar{background:var(--cat-goods-bg); }
+  .cat-free     .card-bar{background:var(--cat-free-bg); }
+  .cat-person{border-color:var(--cat-person-bd);}
+  .cat-state{border-color:var(--cat-state-bd);}
+  .cat-place{border-color:var(--cat-place-bd);}
+  .cat-event{border-color:var(--cat-event-bd);}
+  .cat-concept{border-color:var(--cat-concept-bd);}
+  .cat-goods{border-color:var(--cat-goods-bd);}
+  .cat-free{border-color:var(--cat-free-bd);}
+
+  /* ---------- Footer hint ---------- */
+  #hint{flex-shrink:0;background:var(--navy);color:#cfc7a6;font-size:11px;padding:4px 12px;
+    border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;}
+  #hint span.k{color:var(--gold-soft);font-weight:700;}
+
+  #compass{position:absolute;right:18px;bottom:34px;width:70px;height:70px;opacity:0.35;pointer-events:none;}
+
+  input[type=file]{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="title-row">
+      <span id="appBrand">Historia Canvas</span>
+      <span class="mark">⚜</span>
+      <input id="docTitle" placeholder="タイトルを入力" />
+      <span class="mark">⚜</span>
+    </div>
+    <div class="toolbar-row">
+      <div class="tool-group" id="addCardGroup">
+        <span class="grp-label">カード追加:</span>
+      </div>
+
+      <div class="tool-group">
+        <button class="tbtn" id="connectorModeBtn" title="2枚のカードを順にクリックして矢印で接続します">🔗 矢印モード</button>
+        <select class="tsel" id="presetSelect" title="よく使う組み合わせのプリセット">
+          <option value="">プリセット…</option>
+          <option value="causal">因果・時系列（実線→）</option>
+          <option value="sync">関連・同時代性（点線）</option>
+          <option value="move">人・モノ・文化の移動（太線→）</option>
+          <option value="conflict">対立・戦争（赤線）</option>
+          <option value="alliance">同盟・条約（青線）</option>
+        </select>
+        <select class="tsel" id="lineStyleSelect" title="線の種類">
+          <option value="solid">実線</option>
+          <option value="dashed">点線</option>
+          <option value="thick">太線</option>
+          <option value="wave">波線</option>
+        </select>
+        <select class="tsel" id="arrowHeadSelect" title="矢印の向き">
+          <option value="one">片矢印 →</option>
+          <option value="two">双方向 ↔</option>
+          <option value="none">矢印なし －</option>
+        </select>
+        <select class="tsel" id="colorSelect" title="線の色">
+          <option value="default">標準色</option>
+          <option value="red">赤（対立・戦争）</option>
+          <option value="blue">青（同盟・条約）</option>
+        </select>
+      </div>
+
+      <div class="tool-group">
+        <button class="tbtn" id="groupModeBtn" title="ドラッグして「17世紀」「ヨーロッパ」等の領域枠を作成">▭ グループ枠作成</button>
+      </div>
+
+      <div class="tool-group">
+        <button class="tbtn" id="zoomOutBtn">－</button>
+        <button class="tbtn" id="zoomResetBtn">100%</button>
+        <button class="tbtn" id="zoomInBtn">＋</button>
+      </div>
+
+      <div class="tool-group">
+        <button class="tbtn" id="exportJsonBtn">💾 JSON保存</button>
+        <button class="tbtn" id="importJsonBtn">📂 JSON読込</button>
+        <input type="file" id="importFileInput" accept="application/json" />
+        <button class="tbtn" id="exportPngBtn">🖼 PNG出力</button>
+        <button class="tbtn" id="exportPdfBtn">📄 PDF出力</button>
+      </div>
+
+      <div class="tool-group">
+        <button class="tbtn danger" id="deleteBtn">🗑 選択したカードを削除</button>
+        <button class="tbtn danger" id="clearAllBtn">🧹 カードをすべてクリア</button>
+      </div>
+
+      <div id="historyControls">
+        <button id="undoBtn" title="元に戻す">↺ 元に戻す</button>
+        <button id="redoBtn" title="やり直す">↻ やり直す</button>
+      </div>
+    </div>
+
+    <!-- コンテキストツールバー：選択内容に応じて表示 -->
+    <div class="toolbar-row context-row" id="ctxRow" style="display:none;">
+      <div class="tool-group" id="ctxCardGroup" style="display:none;">
+        <span class="grp-label">カード種類:</span>
+        <select class="tsel" id="ctxTypeSelect"></select>
+        <span class="grp-label">フォント:</span>
+        <select class="tsel" id="ctxFontSelect">
+          <option value="serif">Noto Serif JP</option>
+          <option value="sans">Noto Sans JP</option>
+        </select>
+        <button class="tbtn" id="ctxPinBtn">📌 カードを固定</button>
+      </div>
+      <div class="tool-group" id="ctxGroupGroup" style="display:none;">
+        <button class="tbtn danger" id="ctxDeleteGroupWithCards">🗑 枠と中のカードをまとめて削除</button>
+      </div>
+      <div class="tool-group" id="ctxAlignGroup" style="display:none;">
+        <span class="grp-label">整列形状:</span>
+        <select class="tsel" id="alignShapeSelect">
+          <option value="horizontal">横一列</option>
+          <option value="vertical">縦一列</option>
+          <option value="s">S字</option>
+        </select>
+        <span class="grp-label">間隔:</span>
+        <input type="number" class="tnum" id="alignSpacingInput" value="260" min="80" max="800" step="10">
+        <button class="tbtn gold" id="alignApplyBtn">🧭 カードを整列</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="viewport">
+    <div id="world">
+      <svg id="connectorLayer"><defs id="markerDefs"></defs></svg>
+    </div>
+    <svg id="compass" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="46" fill="none" stroke="#2c2a25" stroke-width="2"/>
+      <polygon points="50,6 58,50 50,94 42,50" fill="#2c2a25"/>
+      <polygon points="6,50 50,42 94,50 50,58" fill="#2c2a25"/>
+      <circle cx="50" cy="50" r="4" fill="#c9a227"/>
+      <text x="50" y="18" text-anchor="middle" font-size="10" font-family="Shippori Mincho, serif" fill="#2c2a25">N</text>
+    </svg>
+  </div>
+
+  <div id="hint">
+    <span><span class="k">左ドラッグ</span>：パン／カード移動　<span class="k">ダブルクリック</span>：新規カード作成　<span class="k">Shift+ドラッグ</span>：範囲選択　<span class="k">Shift/Ctrl+クリック</span>：複数選択　<span class="k">Delete</span>：選択削除</span>
+    <span id="statusMsg"></span>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================
+   定数・データ定義
+========================================================= */
+const WORLD_W = 9000, WORLD_H = 7000;
+
+const CATEGORY_DEFS = {
+  person:  {label:'人物',            icon:'👤', cls:'cat-person'},
+  state:   {label:'国家・王朝・組織', icon:'🏛', cls:'cat-state'},
+  place:   {label:'地名・領域',       icon:'🗺', cls:'cat-place'},
+  event:   {label:'出来事',           icon:'⚔', cls:'cat-event'},
+  concept: {label:'概念・文化・宗教', icon:'📜', cls:'cat-concept'},
+  goods:   {label:'物品・資源',       icon:'🏺', cls:'cat-goods'},
+  free:    {label:'フリーカード',     icon:'📝', cls:'cat-free'}
+};
+const SWATCH_COLORS = {
+  person:'#c9a227', state:'#2f4b7c', place:'#3f7d50', event:'#9b2c2c',
+  concept:'#6a4c93', goods:'#8b5e34', free:'#666660'
+};
+const COLOR_HEX = { default:'#2c2a25', red:'#c0392b', blue:'#2864b3' };
+const PRESETS = {
+  causal:   {lineStyle:'solid',  arrow:'one',  color:'default'},
+  sync:     {lineStyle:'dashed', arrow:'none', color:'default'},
+  move:     {lineStyle:'thick',  arrow:'one',  color:'default'},
+  conflict: {lineStyle:'solid',  arrow:'one',  color:'red'},
+  alliance: {lineStyle:'solid',  arrow:'one',  color:'blue'}
+};
+
+let idSeq = 1;
+function uid(prefix){ return prefix + (idSeq++) + '_' + Math.random().toString(36).slice(2,7); }
+
+/* =========================================================
+   アプリ状態
+========================================================= */
+let state = {
+  title: '',
+  cards: [],      // {id,type,x,y,w,h,title,memo,font,pinned,parentId}
+  connectors: [], // {id,fromId,toId,lineStyle,arrow,color}
+  groups: []      // {id,x,y,w,h,label}
+};
+
+let view = { scale:1, pan:{x:400,y:250} };
+let mode = 'select'; // 'select' | 'connector' | 'group'
+let pendingConnectorFrom = null;
+let lastCardType = 'free';
+
+/* 選択モデル: type: null|'card'|'group'|'connector', ids: 配列（cardのみ複数可） */
+let selection = { type:null, ids:[] };
+
+/* Undo / Redo */
+let undoStack = [];
+let redoStack = [];
+let suppressHistory = false;
+
+/* DOM refs */
+const viewport = document.getElementById('viewport');
+const world = document.getElementById('world');
+const svg = document.getElementById('connectorLayer');
+const markerDefs = document.getElementById('markerDefs');
+const docTitleInput = document.getElementById('docTitle');
+const statusMsg = document.getElementById('statusMsg');
+
+const cardEls = new Map();
+const groupEls = new Map();
+
+/* =========================================================
+   初期化
+========================================================= */
+function init(){
+  buildAddCardButtons();
+  buildTypeSelect();
+  buildMarkerDefs();
+  applyViewTransform();
+  bindToolbar();
+  bindContextToolbar();
+  bindViewportEvents();
+  bindGlobalKeys();
+
+  docTitleInput.addEventListener('focus', ()=>{ historyGuardFocus(docTitleInput); });
+  docTitleInput.addEventListener('input', ()=>{ state.title = docTitleInput.value; });
+  docTitleInput.addEventListener('blur', ()=>{ historyGuardBlur(docTitleInput); });
+
+  pushHistory(); // 初期状態を保存
+  updateUndoRedoButtons();
+  updateContextToolbar();
+  setStatus('準備完了');
+}
+
+function buildAddCardButtons(){
+  const wrap = document.getElementById('addCardGroup');
+  Object.keys(CATEGORY_DEFS).forEach(type=>{
+    const def = CATEGORY_DEFS[type];
+    const btn = document.createElement('button');
+    btn.className = 'tbtn cat-btn';
+    btn.innerHTML = `<span class="cat-swatch" style="background:${SWATCH_COLORS[type]}"></span>${def.icon} ${def.label}`;
+    btn.title = def.label + ' カードを追加';
+    btn.addEventListener('click', ()=>{ lastCardType = type; addCard(type); });
+    wrap.appendChild(btn);
+  });
+}
+
+function buildTypeSelect(){
+  const sel = document.getElementById('ctxTypeSelect');
+  Object.keys(CATEGORY_DEFS).forEach(type=>{
+    const opt = document.createElement('option');
+    opt.value = type;
+    opt.textContent = CATEGORY_DEFS[type].icon + ' ' + CATEGORY_DEFS[type].label;
+    sel.appendChild(opt);
+  });
+}
+
+function buildMarkerDefs(){
+  const colors = Object.keys(COLOR_HEX);
+  let html = '';
+  colors.forEach(c=>{
+    const hex = COLOR_HEX[c];
+    html += `
+    <marker id="arrow-end-${c}" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,4 L0,8 Z" fill="${hex}"></path>
+    </marker>
+    <marker id="arrow-start-${c}" markerWidth="10" markerHeight="10" refX="2" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M8,0 L0,4 L8,8 Z" fill="${hex}"></path>
+    </marker>`;
+  });
+  markerDefs.innerHTML = html;
+}
+
+/* =========================================================
+   座標変換 / 表示
+========================================================= */
+function applyViewTransform(){
+  world.style.transform = `translate(${view.pan.x}px, ${view.pan.y}px) scale(${view.scale})`;
+  document.getElementById('zoomResetBtn').textContent = Math.round(view.scale*100)+'%';
+}
+function screenToWorld(clientX, clientY){
+  const r = viewport.getBoundingClientRect();
+  return {
+    x: (clientX - r.left - view.pan.x)/view.scale,
+    y: (clientY - r.top  - view.pan.y)/view.scale
+  };
+}
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function setStatus(msg){ statusMsg.textContent = msg; }
+
+/* =========================================================
+   履歴 (Undo/Redo)
+========================================================= */
+function snapshotState(){
+  return JSON.stringify({title:state.title, cards:state.cards, connectors:state.connectors, groups:state.groups});
+}
+function pushHistory(){
+  if(suppressHistory) return;
+  undoStack.push(snapshotState());
+  if(undoStack.length>80) undoStack.shift();
+  redoStack = [];
+  updateUndoRedoButtons();
+}
+function undo(){
+  if(undoStack.length<=1) return; // 最初の1件はベースライン
+  const cur = undoStack.pop();
+  redoStack.push(cur);
+  const prev = undoStack[undoStack.length-1];
+  suppressHistory = true;
+  applyStateSnapshot(JSON.parse(prev));
+  suppressHistory = false;
+  updateUndoRedoButtons();
+  setStatus('元に戻しました');
+}
+function redo(){
+  if(redoStack.length===0) return;
+  const next = redoStack.pop();
+  undoStack.push(next);
+  suppressHistory = true;
+  applyStateSnapshot(JSON.parse(next));
+  suppressHistory = false;
+  updateUndoRedoButtons();
+  setStatus('やり直しました');
+}
+function updateUndoRedoButtons(){
+  document.getElementById('undoBtn').disabled = undoStack.length<=1;
+  document.getElementById('redoBtn').disabled = redoStack.length===0;
+}
+function applyStateSnapshot(data){
+  cardEls.forEach(el=>el.remove()); cardEls.clear();
+  groupEls.forEach(el=>el.remove()); groupEls.clear();
+  selection = {type:null, ids:[]};
+  state = {
+    title: data.title || '',
+    cards: Array.isArray(data.cards) ? data.cards : [],
+    connectors: Array.isArray(data.connectors) ? data.connectors : [],
+    groups: Array.isArray(data.groups) ? data.groups : []
+  };
+  docTitleInput.value = state.title;
+  state.groups.forEach(renderGroup);
+  state.cards.forEach(renderCard);
+  renderConnectors();
+  updateContextToolbar();
+}
+
+/* 文字入力用: focus時に一度だけ履歴保存 */
+function historyGuardFocus(el){
+  if(el.dataset.histPushed) return;
+  el.dataset.histPushed = '1';
+  pushHistory();
+}
+function historyGuardBlur(el){
+  delete el.dataset.histPushed;
+}
+
+/* =========================================================
+   選択管理
+========================================================= */
+function isCardSelected(id){ return selection.type==='card' && selection.ids.includes(id); }
+function selectSingle(type, id){
+  selection = {type, ids:[id]};
+  updateSelectionVisuals();
+  updateContextToolbar();
+}
+function selectCardsMulti(ids){
+  selection = {type:'card', ids: ids.slice()};
+  updateSelectionVisuals();
+  updateContextToolbar();
+}
+function toggleCardInSelection(id){
+  if(selection.type !== 'card'){
+    selection = {type:'card', ids:[id]};
+  } else {
+    const idx = selection.ids.indexOf(id);
+    if(idx>=0){
+      selection.ids.splice(idx,1);
+      if(selection.ids.length===0) selection = {type:null, ids:[]};
+    } else {
+      selection.ids.push(id);
+    }
+  }
+  updateSelectionVisuals();
+  updateContextToolbar();
+}
+function clearSelection(){
+  selection = {type:null, ids:[]};
+  updateSelectionVisuals();
+  updateContextToolbar();
+}
+function updateSelectionVisuals(){
+  cardEls.forEach((el,id)=> el.classList.toggle('selected', selection.type==='card' && selection.ids.includes(id)));
+  groupEls.forEach((el,id)=> el.classList.toggle('selected', selection.type==='group' && selection.ids.includes(id)));
+  renderConnectors();
+}
+
+function deleteSelected(){
+  if(selection.type==='card'){
+    const ids = selection.ids.slice();
+    pushHistory();
+    ids.forEach(id=> deleteCardInternal(id));
+    clearSelection();
+    renderConnectors();
+  } else if(selection.type==='group'){
+    pushHistory();
+    deleteGroupInternal(selection.ids[0]);
+    clearSelection();
+  } else if(selection.type==='connector'){
+    pushHistory();
+    state.connectors = state.connectors.filter(c=>c.id!==selection.ids[0]);
+    clearSelection();
+    renderConnectors();
+  }
+}
+
+/* =========================================================
+   コンテキストツールバー
+========================================================= */
+function findChainStartEligible(cardId){
+  const hasIncoming = state.connectors.some(c=>c.toId===cardId);
+  const hasOutgoing = state.connectors.some(c=>c.fromId===cardId);
+  return !hasIncoming && hasOutgoing;
+}
+
+function updateContextToolbar(){
+  const ctxRow = document.getElementById('ctxRow');
+  const ctxCardGroup = document.getElementById('ctxCardGroup');
+  const ctxGroupGroup = document.getElementById('ctxGroupGroup');
+  const ctxAlignGroup = document.getElementById('ctxAlignGroup');
+
+  ctxCardGroup.style.display = 'none';
+  ctxGroupGroup.style.display = 'none';
+  ctxAlignGroup.style.display = 'none';
+
+  let anyVisible = false;
+
+  if(selection.type==='card' && selection.ids.length===1){
+    const card = state.cards.find(c=>c.id===selection.ids[0]);
+    if(card){
+      anyVisible = true;
+      ctxCardGroup.style.display = 'flex';
+      document.getElementById('ctxTypeSelect').value = card.type;
+      document.getElementById('ctxFontSelect').value = card.font || 'serif';
+      document.getElementById('ctxPinBtn').textContent = card.pinned ? '📌 固定を解除' : '📌 カードを固定';
+
+      if(findChainStartEligible(card.id)){
+        ctxAlignGroup.style.display = 'flex';
+        anyVisible = true;
+      }
+    }
+  } else if(selection.type==='group'){
+    anyVisible = true;
+    ctxGroupGroup.style.display = 'flex';
+  } else if(selection.type==='connector'){
+    const conn = state.connectors.find(c=>c.id===selection.ids[0]);
+    if(conn){
+      document.getElementById('lineStyleSelect').value = conn.lineStyle;
+      document.getElementById('arrowHeadSelect').value = conn.arrow;
+      document.getElementById('colorSelect').value = conn.color;
+    }
+  }
+
+  ctxRow.style.display = anyVisible ? 'flex' : 'none';
+}
+
+function bindContextToolbar(){
+  document.getElementById('ctxTypeSelect').addEventListener('change', (e)=>{
+    if(selection.type!=='card' || selection.ids.length!==1) return;
+    const card = state.cards.find(c=>c.id===selection.ids[0]);
+    if(!card) return;
+    pushHistory();
+    card.type = e.target.value;
+    rerenderCard(card);
+    updateContextToolbar();
+    setStatus('カードの種類を変更しました');
+  });
+
+  document.getElementById('ctxFontSelect').addEventListener('change', (e)=>{
+    if(selection.type!=='card' || selection.ids.length!==1) return;
+    const card = state.cards.find(c=>c.id===selection.ids[0]);
+    if(!card) return;
+    pushHistory();
+    card.font = e.target.value;
+    rerenderCard(card);
+    setStatus('フォントを変更しました');
+  });
+
+  document.getElementById('ctxPinBtn').addEventListener('click', ()=>{
+    if(selection.type!=='card' || selection.ids.length!==1) return;
+    const card = state.cards.find(c=>c.id===selection.ids[0]);
+    if(!card) return;
+    pushHistory();
+    card.pinned = !card.pinned;
+    const el = cardEls.get(card.id);
+    el.classList.toggle('pinned', card.pinned);
+    updateContextToolbar();
+    setStatus(card.pinned ? 'カードを固定しました' : '固定を解除しました');
+  });
+
+  document.getElementById('ctxDeleteGroupWithCards').addEventListener('click', ()=>{
+    if(selection.type!=='group') return;
+    const group = state.groups.find(g=>g.id===selection.ids[0]);
+    if(!group) return;
+    const contained = cardsContainedInGroup(group);
+    pushHistory();
+    contained.forEach(c=> deleteCardInternal(c.id));
+    deleteGroupInternal(group.id);
+    clearSelection();
+    renderConnectors();
+    setStatus('グループとその中のカードを削除しました');
+  });
+
+  document.getElementById('alignApplyBtn').addEventListener('click', ()=>{
+    if(selection.type!=='card' || selection.ids.length!==1) return;
+    const card = state.cards.find(c=>c.id===selection.ids[0]);
+    if(!card || !findChainStartEligible(card.id)) return;
+    const shape = document.getElementById('alignShapeSelect').value;
+    const spacing = parseFloat(document.getElementById('alignSpacingInput').value) || 260;
+    alignChain(card.id, shape, spacing);
+  });
+}
+
+/* =========================================================
+   カード
+========================================================= */
+function addCard(type, x, y){
+  const rect = viewport.getBoundingClientRect();
+  let wx, wy;
+  if(x===undefined){
+    const c = screenToWorld(rect.left + rect.width/2 + (Math.random()*60-30), rect.top + rect.height/2 + (Math.random()*60-30));
+    wx = c.x; wy = c.y;
+  } else { wx = x; wy = y; }
+  pushHistory();
+  const card = { id: uid('card'), type, x: wx, y: wy, w:220, h:null,
+                 title:'', memo:'', font:'serif', pinned:false, parentId:null };
+  state.cards.push(card);
+  renderCard(card);
+  renderConnectors();
+  setStatus(CATEGORY_DEFS[type].label + 'カードを追加しました');
+}
+
+function renderCard(card){
+  const def = CATEGORY_DEFS[card.type];
+  const el = document.createElement('div');
+  el.className = 'card ' + def.cls + ' font-' + (card.font||'serif');
+  if(card.pinned) el.classList.add('pinned');
+  el.dataset.id = card.id;
+  el.style.left = card.x + 'px';
+  el.style.top = card.y + 'px';
+  el.style.width = (card.w||220) + 'px';
+  if(card.h){ el.style.height = card.h+'px'; el.classList.add('has-fixed-h'); }
+  el.style.zIndex = String(10 + cardDepth(card.id));
+  el.innerHTML = `
+    <div class="card-bar">
+      <span class="card-icon">${def.icon}</span>
+      <span class="card-cat-label">${def.label}</span>
+      <button class="card-del" title="削除">×</button>
+    </div>
+    <div class="card-title" contenteditable="true" data-placeholder="タイトル"></div>
+    <textarea class="card-memo" placeholder="詳細メモ..." rows="2"></textarea>
+    <div class="card-resize" title="サイズ変更"></div>
+  `;
+  world.appendChild(el);
+  cardEls.set(card.id, el);
+
+  const titleEl = el.querySelector('.card-title');
+  const memoEl = el.querySelector('.card-memo');
+  titleEl.textContent = card.title;
+  memoEl.value = card.memo;
+  if(!card.h) autosize(memoEl);
+
+  titleEl.addEventListener('focus', ()=> historyGuardFocus(titleEl));
+  titleEl.addEventListener('input', ()=>{ card.title = titleEl.textContent; });
+  titleEl.addEventListener('mousedown', e=> e.stopPropagation());
+  titleEl.addEventListener('blur', ()=>{ historyGuardBlur(titleEl); renderConnectors(); });
+
+  memoEl.addEventListener('focus', ()=> historyGuardFocus(memoEl));
+  memoEl.addEventListener('input', ()=>{ card.memo = memoEl.value; if(!card.h) autosize(memoEl); renderConnectors(); });
+  memoEl.addEventListener('mousedown', e=> e.stopPropagation());
+  memoEl.addEventListener('blur', ()=> historyGuardBlur(memoEl));
+
+  el.querySelector('.card-del').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    pushHistory();
+    deleteCardInternal(card.id);
+    if(selection.type==='card') selection.ids = selection.ids.filter(id=>id!==card.id);
+    if(selection.type==='card' && selection.ids.length===0) selection = {type:null, ids:[]};
+    updateContextToolbar();
+    renderConnectors();
+  });
+
+  el.querySelector('.card-resize').addEventListener('mousedown', (e)=>{
+    e.stopPropagation();
+    if(card.pinned) return;
+    startResizeCard(e, card);
+  });
+
+  el.addEventListener('mousedown', (e)=> onCardMouseDown(e, card));
+}
+
+function rerenderCard(card){
+  const old = cardEls.get(card.id);
+  const scrollWasFocused = document.activeElement && old && old.contains(document.activeElement);
+  if(old) old.remove();
+  cardEls.delete(card.id);
+  renderCard(card);
+  if(isCardSelected(card.id)) cardEls.get(card.id).classList.add('selected');
+  renderConnectors();
+}
+
+function autosize(ta){
+  ta.style.height = 'auto';
+  ta.style.height = (ta.scrollHeight) + 'px';
+}
+
+function cardDepth(id){
+  let depth = 0;
+  let card = state.cards.find(c=>c.id===id);
+  const seen = new Set();
+  while(card && card.parentId && !seen.has(card.id)){
+    seen.add(card.id);
+    depth++;
+    card = state.cards.find(c=>c.id===card.parentId);
+  }
+  return depth;
+}
+
+function getDescendantIds(id){
+  const result = [];
+  const stack = [id];
+  while(stack.length){
+    const cur = stack.pop();
+    state.cards.forEach(c=>{
+      if(c.parentId===cur){ result.push(c.id); stack.push(c.id); }
+    });
+  }
+  return result;
+}
+
+function onCardMouseDown(e, card){
+  if(e.target.closest('.card-del') || e.target.closest('.card-resize')) return;
+
+  if(mode === 'connector'){
+    e.stopPropagation();
+    handleConnectorPick(card.id);
+    return;
+  }
+  if(e.target.closest('.card-title') || e.target.closest('.card-memo')){
+    e.stopPropagation();
+    if(!(e.shiftKey || e.ctrlKey || e.metaKey)) selectSingle('card', card.id);
+    return;
+  }
+  e.stopPropagation();
+
+  if(e.shiftKey || e.ctrlKey || e.metaKey){
+    toggleCardInSelection(card.id);
+    return;
+  }
+
+  if(!(selection.type==='card' && selection.ids.includes(card.id) && selection.ids.length>1)){
+    selectSingle('card', card.id);
+  }
+
+  if(card.pinned){ setStatus('このカードは固定されています'); return; }
+  startDragCard(e, card);
+}
+
+function startDragCard(e, primaryCard){
+  const draggingIds = (selection.type==='card' && selection.ids.includes(primaryCard.id))
+    ? selection.ids.slice() : [primaryCard.id];
+
+  // 固定カードはドラッグ対象から除外
+  const movable = draggingIds.filter(id=>{
+    const c = state.cards.find(cc=>cc.id===id);
+    return c && !c.pinned;
+  });
+  if(movable.length===0) return;
+
+  // 子孫カードも一緒に動かす
+  const allMoveIds = new Set(movable);
+  movable.forEach(id=> getDescendantIds(id).forEach(did=>{
+    const dc = state.cards.find(c=>c.id===did);
+    if(dc && !dc.pinned) allMoveIds.add(did);
+  }));
+
+  const startClient = {x:e.clientX, y:e.clientY};
+  const startPositions = {};
+  allMoveIds.forEach(id=>{
+    const c = state.cards.find(cc=>cc.id===id);
+    startPositions[id] = {x:c.x, y:c.y};
+  });
+  let moved = false;
+  let historyPushed = false;
+
+  function onMove(ev){
+    const dx = (ev.clientX - startClient.x)/view.scale;
+    const dy = (ev.clientY - startClient.y)/view.scale;
+    if(Math.abs(dx)+Math.abs(dy) > 2 && !historyPushed){ pushHistory(); historyPushed = true; }
+    if(Math.abs(dx)+Math.abs(dy) > 2) moved = true;
+    allMoveIds.forEach(id=>{
+      const c = state.cards.find(cc=>cc.id===id);
+      const sp = startPositions[id];
+      c.x = sp.x + dx; c.y = sp.y + dy;
+      const el = cardEls.get(id);
+      el.style.left = c.x+'px'; el.style.top = c.y+'px';
+    });
+    renderConnectors();
+  }
+  function onUp(){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    if(moved && movable.length===1){
+      updateNestingForCard(movable[0]);
+    }
+    if(moved) setStatus('カードを移動しました');
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function updateNestingForCard(cardId){
+  const card = state.cards.find(c=>c.id===cardId);
+  if(!card) return;
+  const el = cardEls.get(cardId);
+  const myCx = card.x + el.offsetWidth/2, myCy = card.y + el.offsetHeight/2;
+  const descendants = new Set(getDescendantIds(cardId));
+  descendants.add(cardId);
+
+  let bestParent = null, bestArea = Infinity;
+  state.cards.forEach(other=>{
+    if(descendants.has(other.id)) return;
+    const oe = cardEls.get(other.id);
+    if(!oe) return;
+    const ow = oe.offsetWidth, oh = oe.offsetHeight;
+    if(myCx>=other.x && myCx<=other.x+ow && myCy>=other.y && myCy<=other.y+oh){
+      const area = ow*oh;
+      if(area < bestArea){ bestArea = area; bestParent = other.id; }
+    }
+  });
+  if(card.parentId !== bestParent){
+    card.parentId = bestParent;
+    el.style.zIndex = String(10 + cardDepth(cardId));
+  }
+}
+
+function startResizeCard(e, card){
+  pushHistory();
+  const el = cardEls.get(card.id);
+  const startClient = {x:e.clientX, y:e.clientY};
+  const startW = el.offsetWidth, startH = el.offsetHeight;
+  const memoEl = el.querySelector('.card-memo');
+  function onMove(ev){
+    const dx = (ev.clientX-startClient.x)/view.scale;
+    const dy = (ev.clientY-startClient.y)/view.scale;
+    card.w = Math.max(140, startW+dx);
+    card.h = Math.max(90, startH+dy);
+    el.style.width = card.w+'px';
+    el.style.height = card.h+'px';
+    el.classList.add('has-fixed-h');
+    renderConnectors();
+  }
+  function onUp(){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    setStatus('カードのサイズを変更しました');
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function deleteCardInternal(id){
+  // 子孫は親を失う（トップレベルへ）
+  state.cards.forEach(c=>{ if(c.parentId===id) c.parentId=null; });
+  state.cards = state.cards.filter(c=>c.id!==id);
+  const el = cardEls.get(id); if(el) el.remove();
+  cardEls.delete(id);
+  state.connectors = state.connectors.filter(c=> c.fromId!==id && c.toId!==id);
+}
+
+function getCardRect(id){
+  const el = cardEls.get(id);
+  const card = state.cards.find(c=>c.id===id);
+  if(!el || !card) return null;
+  return { x:card.x, y:card.y, w:el.offsetWidth, h:el.offsetHeight };
+}
+
+/* =========================================================
+   コネクタ（矢印）
+========================================================= */
+function handleConnectorPick(cardId){
+  if(!pendingConnectorFrom){
+    pendingConnectorFrom = cardId;
+    cardEls.get(cardId).classList.add('connector-pending');
+    setStatus('接続先のカードをクリックしてください（同じカードをもう一度クリックでキャンセル）');
+    return;
+  }
+  if(pendingConnectorFrom === cardId){
+    cardEls.get(cardId).classList.remove('connector-pending');
+    pendingConnectorFrom = null;
+    setStatus('矢印作成をキャンセルしました');
+    return;
+  }
+  pushHistory();
+  const style = getCurrentConnectorStyle();
+  const conn = { id: uid('conn'), fromId: pendingConnectorFrom, toId: cardId,
+                 lineStyle: style.lineStyle, arrow: style.arrow, color: style.color };
+  state.connectors.push(conn);
+  cardEls.get(pendingConnectorFrom).classList.remove('connector-pending');
+  pendingConnectorFrom = null;
+  renderConnectors();
+  setStatus('矢印を作成しました');
+}
+
+function getCurrentConnectorStyle(){
+  return {
+    lineStyle: document.getElementById('lineStyleSelect').value,
+    arrow: document.getElementById('arrowHeadSelect').value,
+    color: document.getElementById('colorSelect').value
+  };
+}
+
+function borderIntersection(rect, tx, ty){
+  const cx = rect.x + rect.w/2, cy = rect.y + rect.h/2;
+  const dx = tx - cx, dy = ty - cy;
+  if(dx===0 && dy===0) return {x:cx,y:cy};
+  const hw = rect.w/2, hh = rect.h/2;
+  const scaleX = dx!==0 ? hw/Math.abs(dx) : Infinity;
+  const scaleY = dy!==0 ? hh/Math.abs(dy) : Infinity;
+  const s = Math.min(scaleX, scaleY);
+  return { x: cx + dx*s, y: cy + dy*s };
+}
+
+function wavePath(x1,y1,x2,y2){
+  const dx = x2-x1, dy = y2-y1;
+  const len = Math.sqrt(dx*dx+dy*dy) || 1;
+  const ux = dx/len, uy = dy/len;
+  const nx = -uy, ny = ux;
+  const amp = 8, wavelength = 26;
+  const segs = Math.max(2, Math.round(len/wavelength));
+  let d = `M ${x1} ${y1} `;
+  for(let i=1;i<=segs;i++){
+    const t0 = (i-0.5)/segs, t1 = i/segs;
+    const sign = (i%2===0)? -1: 1;
+    const midX = x1 + dx*t0 + nx*amp*sign;
+    const midY = y1 + dy*t0 + ny*amp*sign;
+    const endX = x1 + dx*t1;
+    const endY = y1 + dy*t1;
+    d += `Q ${midX} ${midY} ${endX} ${endY} `;
+  }
+  return d;
+}
+
+function renderConnectors(){
+  svg.querySelectorAll('g.connector').forEach(g=>g.remove());
+  state.connectors.forEach(conn=>{
+    const rFrom = getCardRect(conn.fromId);
+    const rTo = getCardRect(conn.toId);
+    if(!rFrom || !rTo) return;
+    const c1 = {x:rFrom.x+rFrom.w/2, y:rFrom.y+rFrom.h/2};
+    const c2 = {x:rTo.x+rTo.w/2, y:rTo.y+rTo.h/2};
+    const p1 = borderIntersection(rFrom, c2.x, c2.y);
+    const p2 = borderIntersection(rTo, c1.x, c1.y);
+
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','connector');
+    g.dataset.id = conn.id;
+
+    let d;
+    if(conn.lineStyle === 'wave'){ d = wavePath(p1.x,p1.y,p2.x,p2.y); }
+    else { d = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`; }
+
+    const hit = document.createElementNS('http://www.w3.org/2000/svg','path');
+    hit.setAttribute('d', d);
+    hit.setAttribute('class','hit');
+    hit.setAttribute('stroke','transparent');
+    hit.setAttribute('stroke-width','16');
+    hit.setAttribute('fill','none');
+    hit.addEventListener('mousedown', e=> e.stopPropagation());
+    hit.addEventListener('click', (e)=>{ e.stopPropagation(); selectSingle('connector', conn.id); });
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill','none');
+    const color = COLOR_HEX[conn.color] || COLOR_HEX.default;
+    path.setAttribute('stroke', color);
+    let sw = 2.4;
+    if(conn.lineStyle==='thick') sw = 6.5;
+    if(conn.lineStyle==='wave') sw = 3;
+    path.setAttribute('stroke-width', sw);
+    path.setAttribute('stroke-linecap','round');
+    if(conn.lineStyle==='dashed') path.setAttribute('stroke-dasharray','9,7');
+    if(conn.arrow==='one' || conn.arrow==='two') path.setAttribute('marker-end', `url(#arrow-end-${conn.color})`);
+    if(conn.arrow==='two') path.setAttribute('marker-start', `url(#arrow-start-${conn.color})`);
+
+    if(selection.type==='connector' && selection.ids[0]===conn.id){
+      path.classList.add('selected-halo');
+    }
+
+    g.appendChild(hit);
+    g.appendChild(path);
+    svg.appendChild(g);
+  });
+}
+
+/* 選択中のコネクタへスタイル変更を反映 */
+function applyStyleSelectsToSelectedConnector(){
+  if(selection.type!=='connector') return;
+  const conn = state.connectors.find(c=>c.id===selection.ids[0]);
+  if(!conn) return;
+  pushHistory();
+  conn.lineStyle = document.getElementById('lineStyleSelect').value;
+  conn.arrow = document.getElementById('arrowHeadSelect').value;
+  conn.color = document.getElementById('colorSelect').value;
+  renderConnectors();
+  setStatus('矢印のスタイルを変更しました');
+}
+
+/* =========================================================
+   グループ枠
+========================================================= */
+function cardsContainedInGroup(group){
+  return state.cards.filter(c=>{
+    const el = cardEls.get(c.id);
+    const w = el? el.offsetWidth: 220, h = el? el.offsetHeight: 60;
+    const cx = c.x + w/2, cy = c.y + h/2;
+    return cx>=group.x && cx<=group.x+group.w && cy>=group.y && cy<=group.y+group.h;
+  });
+}
+
+function renderGroup(group){
+  const el = document.createElement('div');
+  el.className = 'group-box';
+  el.dataset.id = group.id;
+  el.style.left = group.x+'px';
+  el.style.top = group.y+'px';
+  el.style.width = group.w+'px';
+  el.style.height = group.h+'px';
+  el.innerHTML = `
+    <div class="group-label" contenteditable="true"></div>
+    <button class="group-del" title="削除">×</button>
+    <div class="group-resize" title="サイズ変更"></div>
+  `;
+  world.insertBefore(el, world.firstChild.nextSibling || null);
+  groupEls.set(group.id, el);
+
+  const labelEl = el.querySelector('.group-label');
+  labelEl.textContent = group.label;
+  labelEl.addEventListener('focus', ()=> historyGuardFocus(labelEl));
+  labelEl.addEventListener('input', ()=>{ group.label = labelEl.textContent; });
+  labelEl.addEventListener('mousedown', e=> e.stopPropagation());
+  labelEl.addEventListener('blur', ()=> historyGuardBlur(labelEl));
+
+  el.querySelector('.group-del').addEventListener('click', (e)=>{
+    e.stopPropagation(); pushHistory(); deleteGroupInternal(group.id); clearSelection();
+  });
+
+  el.addEventListener('mousedown', (e)=>{
+    if(e.target.closest('.group-label') || e.target.closest('.group-del') || e.target.closest('.group-resize')) return;
+    e.stopPropagation();
+    selectSingle('group', group.id);
+    startDragGroup(e, group);
+  });
+
+  el.querySelector('.group-resize').addEventListener('mousedown', (e)=>{
+    e.stopPropagation();
+    startResizeGroup(e, group);
+  });
+}
+
+function startDragGroup(e, group){
+  pushHistory();
+  const startClient = {x:e.clientX, y:e.clientY};
+  const startPos = {x:group.x, y:group.y};
+  const contained = cardsContainedInGroup(group).filter(c=>!c.pinned);
+  const cardStart = contained.map(c=>({card:c, x:c.x, y:c.y}));
+
+  function onMove(ev){
+    const dx = (ev.clientX-startClient.x)/view.scale;
+    const dy = (ev.clientY-startClient.y)/view.scale;
+    group.x = startPos.x+dx; group.y = startPos.y+dy;
+    const el = groupEls.get(group.id);
+    el.style.left = group.x+'px'; el.style.top = group.y+'px';
+    cardStart.forEach(cs=>{
+      cs.card.x = cs.x+dx; cs.card.y = cs.y+dy;
+      const cel = cardEls.get(cs.card.id);
+      if(cel){ cel.style.left = cs.card.x+'px'; cel.style.top = cs.card.y+'px'; }
+    });
+    renderConnectors();
+  }
+  function onUp(){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function startResizeGroup(e, group){
+  pushHistory();
+  const startClient = {x:e.clientX, y:e.clientY};
+  const startSize = {w:group.w, h:group.h};
+  function onMove(ev){
+    const dx = (ev.clientX-startClient.x)/view.scale;
+    const dy = (ev.clientY-startClient.y)/view.scale;
+    group.w = Math.max(80, startSize.w+dx);
+    group.h = Math.max(60, startSize.h+dy);
+    const el = groupEls.get(group.id);
+    el.style.width = group.w+'px'; el.style.height = group.h+'px';
+  }
+  function onUp(){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function deleteGroupInternal(id){
+  state.groups = state.groups.filter(g=>g.id!==id);
+  const el = groupEls.get(id); if(el) el.remove();
+  groupEls.delete(id);
+}
+
+/* =========================================================
+   モード切替
+========================================================= */
+function setMode(newMode){
+  mode = newMode;
+  if(pendingConnectorFrom){
+    cardEls.get(pendingConnectorFrom)?.classList.remove('connector-pending');
+    pendingConnectorFrom = null;
+  }
+  viewport.classList.remove('mode-connector','mode-group');
+  document.getElementById('connectorModeBtn').classList.remove('active');
+  document.getElementById('groupModeBtn').classList.remove('active');
+  if(newMode==='connector'){
+    viewport.classList.add('mode-connector');
+    document.getElementById('connectorModeBtn').classList.add('active');
+    setStatus('矢印モード：接続元のカードをクリックしてください');
+  } else if(newMode==='group'){
+    viewport.classList.add('mode-group');
+    document.getElementById('groupModeBtn').classList.add('active');
+    setStatus('グループ作成モード：ドラッグして範囲を指定してください');
+  } else {
+    setStatus('選択モード');
+  }
+}
+
+/* =========================================================
+   ビューポート操作（パン・ズーム・矩形選択・グループ描画・ダブルクリック作成）
+========================================================= */
+function bindViewportEvents(){
+  viewport.addEventListener('mousedown', (e)=>{
+    if(e.target.closest('.card') || e.target.closest('.group-box') || e.target.closest('.connector')) return;
+
+    if(mode === 'connector'){
+      if(pendingConnectorFrom){
+        cardEls.get(pendingConnectorFrom).classList.remove('connector-pending');
+        pendingConnectorFrom = null;
+        setStatus('矢印作成をキャンセルしました');
+      }
+      return;
+    }
+    if(mode === 'group'){
+      startDrawGroup(e);
+      return;
+    }
+    if(e.shiftKey){
+      startRubberBandSelect(e);
+      return;
+    }
+    clearSelection();
+    startPan(e);
+  });
+
+  viewport.addEventListener('dblclick', (e)=>{
+    if(e.target.closest('.card') || e.target.closest('.group-box')) return;
+    if(mode !== 'select') return;
+    const p = screenToWorld(e.clientX, e.clientY);
+    addCard(lastCardType, p.x - 110, p.y - 30);
+  });
+
+  viewport.addEventListener('wheel', (e)=>{
+    e.preventDefault();
+    const r = viewport.getBoundingClientRect();
+    const mx = e.clientX-r.left, my = e.clientY-r.top;
+    const wx = (mx-view.pan.x)/view.scale;
+    const wy = (my-view.pan.y)/view.scale;
+    const delta = -e.deltaY*0.0012;
+    const newScale = clamp(view.scale*(1+delta), 0.2, 3);
+    view.pan.x = mx - wx*newScale;
+    view.pan.y = my - wy*newScale;
+    view.scale = newScale;
+    applyViewTransform();
+  }, {passive:false});
+}
+
+function startPan(e){
+  viewport.classList.add('panning');
+  const startClient = {x:e.clientX, y:e.clientY};
+  const startPan = {x:view.pan.x, y:view.pan.y};
+  function onMove(ev){
+    view.pan.x = startPan.x + (ev.clientX-startClient.x);
+    view.pan.y = startPan.y + (ev.clientY-startClient.y);
+    applyViewTransform();
+  }
+  function onUp(){
+    viewport.classList.remove('panning');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function startRubberBandSelect(e){
+  const startW = screenToWorld(e.clientX, e.clientY);
+  const draft = document.createElement('div');
+  draft.className = 'select-draft';
+  world.appendChild(draft);
+  function update(x,y,w,h){
+    draft.style.left=x+'px'; draft.style.top=y+'px';
+    draft.style.width=w+'px'; draft.style.height=h+'px';
+  }
+  update(startW.x, startW.y, 1, 1);
+  function onMove(ev){
+    const curW = screenToWorld(ev.clientX, ev.clientY);
+    const x = Math.min(startW.x, curW.x), y = Math.min(startW.y, curW.y);
+    const w = Math.abs(curW.x-startW.x), h = Math.abs(curW.y-startW.y);
+    update(x,y,w,h);
+  }
+  function onUp(ev){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    const curW = screenToWorld(ev.clientX, ev.clientY);
+    draft.remove();
+    const x0 = Math.min(startW.x, curW.x), y0 = Math.min(startW.y, curW.y);
+    const x1 = Math.max(startW.x, curW.x), y1 = Math.max(startW.y, curW.y);
+    const picked = state.cards.filter(c=>{
+      const el = cardEls.get(c.id);
+      const w = el?el.offsetWidth:220, h = el?el.offsetHeight:70;
+      const cx = c.x+w/2, cy = c.y+h/2;
+      return cx>=x0 && cx<=x1 && cy>=y0 && cy<=y1;
+    }).map(c=>c.id);
+    if(picked.length>0){ selectCardsMulti(picked); setStatus(picked.length+'枚のカードを選択しました'); }
+    else clearSelection();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function startDrawGroup(e){
+  pushHistory();
+  const startW = screenToWorld(e.clientX, e.clientY);
+  const draft = document.createElement('div');
+  draft.className = 'group-draft';
+  world.appendChild(draft);
+  function update(x,y,w,h){
+    draft.style.left=x+'px'; draft.style.top=y+'px';
+    draft.style.width=w+'px'; draft.style.height=h+'px';
+  }
+  update(startW.x, startW.y, 1, 1);
+
+  function onMove(ev){
+    const curW = screenToWorld(ev.clientX, ev.clientY);
+    const x = Math.min(startW.x, curW.x), y = Math.min(startW.y, curW.y);
+    const w = Math.abs(curW.x-startW.x), h = Math.abs(curW.y-startW.y);
+    update(x,y,w,h);
+  }
+  function onUp(ev){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    const curW = screenToWorld(ev.clientX, ev.clientY);
+    draft.remove();
+    let x = Math.min(startW.x, curW.x), y = Math.min(startW.y, curW.y);
+    let w = Math.abs(curW.x-startW.x), h = Math.abs(curW.y-startW.y);
+    if(w<40 || h<40){ w=Math.max(w,220); h=Math.max(h,140); }
+    const group = { id: uid('group'), x, y, w, h, label: '新しいグループ' };
+    state.groups.push(group);
+    renderGroup(group);
+    setMode('select');
+    selectSingle('group', group.id);
+    setStatus('グループ枠を作成しました。ラベルを編集できます');
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+/* =========================================================
+   整列 (Align)
+========================================================= */
+function buildChain(startId){
+  const chain = [startId];
+  const visited = new Set([startId]);
+  let current = startId;
+  while(true){
+    const next = state.connectors.find(c=>c.fromId===current && !visited.has(c.toId));
+    if(!next) break;
+    chain.push(next.toId);
+    visited.add(next.toId);
+    current = next.toId;
+  }
+  return chain;
+}
+
+function alignChain(startId, shape, spacing){
+  const chain = buildChain(startId);
+  if(chain.length<2){ setStatus('つながっている矢印がありません'); return; }
+  pushHistory();
+  const first = state.cards.find(c=>c.id===startId);
+  const baseX = first.x, baseY = first.y;
+  const n = chain.length;
+  const amplitude = 170;
+  let skipped = 0;
+
+  chain.forEach((id, i)=>{
+    const card = state.cards.find(c=>c.id===id);
+    if(!card) return;
+    if(card.pinned){ skipped++; return; }
+    let nx, ny;
+    if(shape==='horizontal'){ nx = baseX + i*spacing; ny = baseY; }
+    else if(shape==='vertical'){ nx = baseX; ny = baseY + i*spacing; }
+    else { // S字
+      nx = baseX + i*spacing;
+      ny = baseY + amplitude*Math.sin((i/(n-1||1)) * Math.PI*2);
+    }
+    card.x = nx; card.y = ny;
+    const el = cardEls.get(id);
+    if(el){ el.style.left = nx+'px'; el.style.top = ny+'px'; }
+  });
+  renderConnectors();
+  setStatus('カードを整列しました' + (skipped? `（固定中の${skipped}枚はスキップ）`:''));
+}
+
+/* =========================================================
+   ツールバー / キーボード
+========================================================= */
+function bindToolbar(){
+  document.getElementById('connectorModeBtn').addEventListener('click', ()=>{
+    setMode(mode==='connector' ? 'select' : 'connector');
+  });
+  document.getElementById('groupModeBtn').addEventListener('click', ()=>{
+    setMode(mode==='group' ? 'select' : 'group');
+  });
+  document.getElementById('presetSelect').addEventListener('change', (e)=>{
+    const p = PRESETS[e.target.value];
+    if(!p) return;
+    document.getElementById('lineStyleSelect').value = p.lineStyle;
+    document.getElementById('arrowHeadSelect').value = p.arrow;
+    document.getElementById('colorSelect').value = p.color;
+    applyStyleSelectsToSelectedConnector();
+  });
+  ['lineStyleSelect','arrowHeadSelect','colorSelect'].forEach(id=>{
+    document.getElementById(id).addEventListener('change', applyStyleSelectsToSelectedConnector);
+  });
+
+  document.getElementById('zoomInBtn').addEventListener('click', ()=> zoomBy(1.2));
+  document.getElementById('zoomOutBtn').addEventListener('click', ()=> zoomBy(1/1.2));
+  document.getElementById('zoomResetBtn').addEventListener('click', ()=>{
+    view.scale = 1; view.pan = {x:400,y:250}; applyViewTransform();
+  });
+
+  document.getElementById('exportJsonBtn').addEventListener('click', exportJSON);
+  document.getElementById('importJsonBtn').addEventListener('click', ()=> document.getElementById('importFileInput').click());
+  document.getElementById('importFileInput').addEventListener('change', importJSONFile);
+  document.getElementById('exportPngBtn').addEventListener('click', exportPNG);
+  document.getElementById('exportPdfBtn').addEventListener('click', exportPDF);
+
+  document.getElementById('deleteBtn').addEventListener('click', deleteSelected);
+  document.getElementById('clearAllBtn').addEventListener('click', clearAllCards);
+
+  document.getElementById('undoBtn').addEventListener('click', undo);
+  document.getElementById('redoBtn').addEventListener('click', redo);
+}
+
+function clearAllCards(){
+  if(state.cards.length===0){ setStatus('カードがありません'); return; }
+  const ok = confirm('キャンバス内のすべてのカードを削除します。よろしいですか？（矢印も削除されます）');
+  if(!ok) return;
+  pushHistory();
+  state.cards.slice().forEach(c=> deleteCardInternal(c.id));
+  clearSelection();
+  renderConnectors();
+  setStatus('すべてのカードを削除しました');
+}
+
+function zoomBy(factor){
+  const r = viewport.getBoundingClientRect();
+  const mx = r.width/2, my = r.height/2;
+  const wx = (mx-view.pan.x)/view.scale, wy=(my-view.pan.y)/view.scale;
+  view.scale = clamp(view.scale*factor, 0.2, 3);
+  view.pan.x = mx - wx*view.scale;
+  view.pan.y = my - wy*view.scale;
+  applyViewTransform();
+}
+
+function bindGlobalKeys(){
+  document.addEventListener('keydown', (e)=>{
+    const tag = document.activeElement.tagName;
+    const editable = document.activeElement.isContentEditable;
+    const inField = (tag==='INPUT' || tag==='TEXTAREA' || editable);
+
+    if(!inField && (e.key==='Delete' || e.key==='Backspace')){
+      if(selection.type){ e.preventDefault(); deleteSelected(); }
+      return;
+    }
+    if(e.key==='Escape'){
+      if(pendingConnectorFrom){
+        cardEls.get(pendingConnectorFrom).classList.remove('connector-pending');
+        pendingConnectorFrom = null;
+      }
+      setMode('select');
+      clearSelection();
+      return;
+    }
+    if(!inField && (e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='z' && !e.shiftKey){
+      e.preventDefault(); undo(); return;
+    }
+    if(!inField && (e.ctrlKey || e.metaKey) && (e.key.toLowerCase()==='y' || (e.key.toLowerCase()==='z' && e.shiftKey))){
+      e.preventDefault(); redo(); return;
+    }
+  });
+}
+
+/* =========================================================
+   JSON 入出力
+========================================================= */
+function exportJSON(){
+  state.title = docTitleInput.value;
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (state.title || 'history-map') + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('JSONファイルを保存しました');
+}
+
+function importJSONFile(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      pushHistory();
+      applyStateSnapshot(data);
+      setStatus('JSONファイルを読み込みました');
+    }catch(err){
+      alert('JSONファイルの読み込みに失敗しました: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* =========================================================
+   PNG / PDF 出力
+========================================================= */
+function computeBBox(){
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  state.cards.forEach(c=>{
+    const el = cardEls.get(c.id);
+    const w = el?el.offsetWidth:220, h = el?el.offsetHeight:70;
+    minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
+    maxX = Math.max(maxX, c.x+w); maxY = Math.max(maxY, c.y+h);
+  });
+  state.groups.forEach(g=>{
+    minX = Math.min(minX, g.x); minY = Math.min(minY, g.y);
+    maxX = Math.max(maxX, g.x+g.w); maxY = Math.max(maxY, g.y+g.h);
+  });
+  if(!isFinite(minX)){ minX=0; minY=0; maxX=800; maxY=600; }
+  return {minX,minY,maxX,maxY};
+}
+
+async function captureCanvas(){
+  const bbox = computeBBox();
+  const pad = 60;
+  const x = bbox.minX-pad, y = bbox.minY-pad;
+  const width = (bbox.maxX-bbox.minX)+pad*2;
+  const height = (bbox.maxY-bbox.minY)+pad*2;
+
+  const prevTransform = world.style.transform;
+  world.style.transform = 'none';
+  updateSelectionVisuals();
+  cardEls.forEach(el=>el.classList.remove('selected'));
+  groupEls.forEach(el=>el.classList.remove('selected'));
+
+  const canvas = await html2canvas(world, {
+    x, y, width, height,
+    backgroundColor: '#e3d6b8',
+    scale: 2,
+    useCORS: true
+  });
+
+  world.style.transform = prevTransform;
+  updateSelectionVisuals();
+  return canvas;
+}
+
+async function exportPNG(){
+  setStatus('PNG画像を生成中…');
+  try{
+    const canvas = await captureCanvas();
+    const link = document.createElement('a');
+    link.download = (state.title || docTitleInput.value || 'history-map') + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    setStatus('PNG画像をダウンロードしました');
+  }catch(err){
+    console.error(err);
+    alert('PNG出力に失敗しました: ' + err.message);
+    setStatus('PNG出力に失敗しました');
+  }
+}
+
+async function exportPDF(){
+  setStatus('PDFを生成中…');
+  try{
+    const canvas = await captureCanvas();
+    const { jsPDF } = window.jspdf;
+    const ratio = canvas.width / canvas.height;
+    const maxDim = 1400;
+    let pageW, pageH;
+    if(ratio >= 1){ pageW = maxDim; pageH = maxDim/ratio; }
+    else { pageH = maxDim; pageW = maxDim*ratio; }
+    const pdf = new jsPDF({
+      orientation: ratio>=1 ? 'landscape':'portrait',
+      unit: 'pt',
+      format: [pageW, pageH]
+    });
+    const imgData = canvas.toDataURL('image/png');
+    pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH);
+    pdf.save((state.title || docTitleInput.value || 'history-map') + '.pdf');
+    setStatus('PDFをダウンロードしました');
+  }catch(err){
+    console.error(err);
+    alert('PDF出力に失敗しました: ' + err.message);
+    setStatus('PDF出力に失敗しました');
+  }
+}
+
+/* =========================================================
+   起動
+========================================================= */
+init();
+
+})();
+</script>
+</body>
+</html>
